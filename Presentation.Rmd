@@ -1,0 +1,368 @@
+---
+title: "COMP6115 - Assigmment 2"
+author: Ottor Mills
+date: April 30, 2022
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+\begin{flushright}
+ID: 620098373
+\end{flushright}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=TRUE)
+```
+
+
+
+# Task 01
+### Cleaning and preparing environment
+```{r cleaning_and_loading}
+rm(list=ls())
+options(scipen=99999)
+```
+
+### Loading libraries
+```{r libraries}
+library(classInt)
+```
+
+
+### Setting working directory and loading dataset
+```{r}
+tryCatch({
+  setwd(getSrcDirectory()[1])
+}, error = function (e) {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+})
+
+dataset <- read.csv("./datasets/SalesData.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
+```
+Dataset loaded from the datasets folder in the working directory
+
+
+## Data Cleaning
+
+### Replacing NA's from Region column
+```{r}
+dataset$Region <- as.character(dataset$Region)
+dataset$Region[is.na(dataset$Region)] <- "Unknown"
+dataset$Region <- factor(dataset$Region)
+```
+NA values were removed from the "Region" column
+
+### Replacing NA's from ItemType column
+```{r}
+dataset$ItemType <- as.character(dataset$ItemType)
+dataset$ItemType[is.na(dataset$ItemType)] <- "Unknown"
+dataset$ItemType <- factor(dataset$ItemType)
+```
+NA values were removed from the "Item Type" column
+
+### Replacing NA's and irrelevant values from SalesChannel column
+```{r}
+dataset$Sales.Channel <- as.character(dataset$Sales.Channel)
+dataset$Sales.Channel[is.na(dataset$Sales.Channel)] <- "Unknown"
+dataset$Sales.Channel[dataset$Sales.Channel != "Online" & dataset$Sales.Channel != "Offline"] <- "Unknown"
+dataset$Sales.Channel <- factor(dataset$Sales.Channel)
+```
+NA values were removed from the "Sales Channel" column
+
+### Convert dataset dates to date objects
+```{r}
+dataset$Order.Date <- as.Date(dataset$Order.Date, format = "%m/%d/%Y")
+dataset$Ship.Date <- as.Date(dataset$Ship.Date, format = "%m/%d/%Y")
+```
+The date columns of the dataset were converted to date objects for easier date related processing
+
+### Normalization of dataset unit price column
+```{r}
+dataset$Unit.Price <- ((dataset$Unit.Price - min(dataset$Unit.Price))/(max(dataset$Unit.Price) - min(dataset$Unit.Price))) * (10-1) + 1
+```
+The "Unit Price" column was normalized using the min-max normalization technique
+
+### Discretization of "Units Sold" column
+```{r}
+bins <- classIntervals(dataset$Units.Sold, 3, style = 'equal')
+unitsSoldType = c()
+for (i in 1:length(dataset$Units.Sold)) {
+  rating = "L"
+  if(dataset$Units.Sold[i] > bins$brks[2] && dataset$Units.Sold[i] <= bins$brks[3]){
+    rating = "M"
+  }
+  if(dataset$Units.Sold[i] > bins$brks[3]){
+    rating = "H"
+  }
+  unitsSoldType <- append(unitsSoldType, rating)
+}
+dataset$Units.Sold.Type <- as.factor(unitsSoldType)
+```
+Discretization of the "Units Sold" column was carries out using equal width binning and saved into a new column called "Units Sold Type".
+
+Key:
+\begin{tabular}{ c c }
+ L & Low \\ 
+ M & Medium \\  
+ H & High    
+\end{tabular}
+
+From the density plot we can see that three clusters can be identified
+
+### Save Dataset
+```{r}
+write.csv(dataset, "./output/sales-data_cleaned.csv", row.names = F)
+```
+Output cleaned dataset to output folder of working directory
+
+## Solution
+The goal of this study was to identify how attributes of the provided sales data data set are related. Outlined in this section is the approach which was taken to achieve this goal with aiding visual representation of both agglomorative and kmeans clusters.
+
+### Loading Cleaned Dataset
+```{r}
+cleanedDataset <- read.csv("./output/sales-data_cleaned.csv", stringsAsFactors = T)
+```
+
+
+### Calculation of shipping time
+```{r}
+deliveryDays <- c()
+for (i in 1:length(cleanedDataset$Order.Date)) {
+  shippingDays <- as.Date(cleanedDataset$Ship.Date[i]) - as.Date(cleanedDataset$Order.Date[i])
+  deliveryDays <- append(deliveryDays, as.integer(strtoi(shippingDays, base = 0L)))
+}
+cleanedDataset$Ship.Time <- deliveryDays
+```
+The skipping time was calculated by finding the difference between the "Ship Date" from the "Order Date" this produced the difference in days which was formatted appropriately.
+
+### Removing of ID fields 
+```{r}
+cleanedDataset$Order.ID <- NULL
+```
+ID fields are not needed for cluster generation and were removed
+
+### Numerical conversion of data
+```{r}
+cleanedDataset <- dplyr::mutate_all(cleanedDataset, function(x) as.numeric(x))
+```
+All fields were converted into numerical format in preparation for clustering
+
+
+### Sample generation
+```{r}
+sample.salesdata <- cleanedDataset[1:200,]
+```
+A subset of the data was selected to be used for cluster generation
+
+## Hierichical Clustering (Agglomorative)
+```{r}
+dis.matrix <- dist(sample.salesdata)
+hclust.01 <- hclust(dis.matrix, method = "average")
+plot(hclust.01)
+```
+
+### 4 cluster : 
+```{r}
+cluster.members.four <- cutree(hclust.01, 4)
+plot(cluster.members.four)
+```
+
+### 6 cluster : 
+```{r}
+cluster.members.four <- cutree(hclust.01, 6)
+plot(cluster.members.four)
+```
+
+### 8 cluster : 
+```{r}
+cluster.members.four <- cutree(hclust.01, 8)
+plot(cluster.members.four)
+```
+
+## KMeans Clustustering
+```{r}
+km.results.four <- kmeans(sample.salesdata, 4)
+plot(sample.salesdata, km.results.four$cluster)
+```
+
+### 4 cluster : 
+```{r}
+cluster.members.four <- cutree(hclust.01, 4)
+plot(cluster.members.four)
+```
+
+### 6 cluster : 
+```{r}
+km.results.six <- kmeans(sample.salesdata, 6)
+plot(sample.salesdata, km.results.six$cluster)
+```
+
+### 8 cluster : 
+```{r}
+km.results.eight <- kmeans(sample.salesdata, 8)
+plot(sample.salesdata, km.results.eight$cluster)
+```
+
+
+
+
+
+
+
+# Task 02
+
+### Cleaning and preparing environment
+```{r}
+rm(list=ls())
+options(scipen=99999)
+```
+
+### Loading libraries
+```{r}
+pacman::p_load(
+  "arules",
+  # "arulesViz",
+  "zeallot",
+  "backports",
+  "classInt",
+  "dplyr",
+  "chron"
+)
+```
+Installation of the necessary libraries using pacman
+
+### Setting working directory and loading dataset
+```{r}
+tryCatch({
+  setwd(getSrcDirectory()[1])
+}, error = function (e) {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+})
+
+dataset <- read.csv("./datasets/OnlineRetail.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
+```
+Dataset loaded from the datasets folder in the working directory
+
+
+## Data Cleaning
+
+### Removing unnecessary countries
+```{r}
+dataset <- filter(dataset, Country == "Switzerland")
+```
+Only records originating in "Switzerland" were selected for this study
+
+### Removing unnecessary countries
+```{r}
+dataset <- filter(dataset, nchar(as.character(dataset$Description)) > 5)
+```
+Removal of meaningless descriptions. Most item descriptions were observed to have long titles.
+
+### Correcting negative quantities
+```{r}
+dataset$Quantity <- abs(dataset$Quantity)
+dataset$UnitPrice <- abs(dataset$UnitPrice)
+```
+Corrections were made by overriding each quality value with their corresponding absolute value
+
+### Correcting negative quantities
+```{r}
+dataset$Quantity <- abs(dataset$Quantity)
+dataset$UnitPrice <- abs(dataset$UnitPrice)
+```
+
+### Outlier Removal
+```{r}
+q1UnitPrice <- summary(dataset$UnitPrice)[2]
+q3UnitPrice <- summary(dataset$UnitPrice)[5]
+IQR <- q3UnitPrice - q1UnitPrice
+
+dataset <- dataset[dataset$UnitPrice >= q1UnitPrice - 1.5*IQR & dataset$UnitPrice <= q3UnitPrice + 1.5*IQR, ]
+```
+Removal of outliers using the interquartile range (IQR). A point is an outlier if it is above the 75th or below the 25th percentile by a factor of 1.5 times the IQR as shown in the code snippet above.
+
+### Discretization of Quantity
+```{r}
+dataset$Quantity <- cut(dataset$Quantity, c(0,5,10,15,max(dataset$Quantity)), right = TRUE, labels = c("L","M","H","VH"))
+```
+Discretization of "Quantity" was done to generate 4 categorical values, which also addresses outliers
+
+### Normalization of UnitPrice
+```{r}
+dataset$UnitPrice <- ((dataset$UnitPrice - min(dataset$UnitPrice))/(max(dataset$UnitPrice) - min(dataset$UnitPrice))) * (10-1) + 1
+```
+
+### Replacing Unwanted Characters
+```{r}
+dataset$Description <- trimws(dataset$Description)
+```
+Unwanted characters were removed from the description column. The trimws function removes whitespaces from the ends of each description value
+
+### Replacing Whitespaces
+```{r}
+dataset$Description <- gsub(" ", "_", dataset$Description)
+```
+Whitespaces were removed from the "Description" column in order to minimize the risk of human related errors due to whitespaces
+
+### Removal of free items
+```{r}
+dataset <- filter(dataset, UnitPrice > 0)
+```
+Free items were removed from the dataset as they could potentially interrupt the meaningfulness of the study
+
+### Removal of free items
+```{r}
+dataset$InvoiceNo <- gsub("C", "", dataset$InvoiceNo)
+```
+The "C" characters were removed from the "InvoiceNo" column in order to make the enter column integer values
+
+### Cleaning date field (separation of date and time)
+```{r}
+invoiceTimes <- c()
+invoiceDates <- c()
+for(i in 1:length(dataset$InvoiceDate)){
+  splittedDate <- strsplit(toString(dataset$InvoiceDate[i]), " ")
+  invoiceDate <- splittedDate[[1]][1]
+  # Seconds are needed in order to convert string to chron objects
+  invoiceTime <- paste(splittedDate[[1]][2], ":00", sep="")
+  invoiceTimes <- append(invoiceTimes, invoiceTime)
+  invoiceDates <- append(invoiceDates, invoiceDate)
+}
+dataset$InvoiceDate <- invoiceDates
+```
+The dates in the "InvoiceDate" field were split. The time portion of each date was stripped before being used to override the previous date value
+
+### Creation of Chron column
+```{r}
+invoiceDates <- as.Date(dataset$InvoiceDate, format = "%m/%d/%Y")
+chronDateValues <- chron(date=as.character(invoiceDates), times=invoiceTimes, format=c(dates="Y-m-d", times="h:m:s"))
+dataset <- tibble::add_column(dataset, ChronDates = chronDateValues, .after = "InvoiceDate")
+```
+The stripped time portion of each date in the "InvoiceDate" field are utilized to generate chron date values which are saved into a new column called "ChronDates"
+
+### Saving of Cleaned Dataset
+```{r}
+write.csv(dataset, "./output/switzerland-retail-data_cleaned.csv", row.names = F)
+```
+the cleaned dataset was saved to file
+
+
+## Solution
+The goal of this study was to identify ideal support and confidence values that resulted in the maximal lift.
+
+### Loading of Cleaned Dataset
+```{r}
+switzerlandRetailData <- read.transactions("./output/switzerland-retail-data_cleaned.csv", format=c("single"), header = TRUE, rm.duplicates = FALSE, cols = c("InvoiceNo", "StockCode"), sep=",")
+```
+
+### Apriori Mining
+```{r}
+drules2 <- apriori(switzerlandRetailData, parameter = list(support=0.1, confidence=0.8, minlen=2, maxlen=4))
+summary(drules2)
+#plot(drules2)
+```
+Apriori mining carried out on cleansed dataset in order to identify positively related associations. (Lift value > 1). The ideal values for support was found to be 0.1 and the ideal value for lift was found to be 0.8. A diagram could not be provided at this time due to an error installing the "arulesViz" package.
+
+

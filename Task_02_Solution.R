@@ -1,3 +1,6 @@
+rm(list=ls())
+options(scipen=99999)
+
 # install.packages("pacman")
 
 # Load packages, install if unavailable
@@ -11,9 +14,6 @@ pacman::p_load(
   "chron"
 )
 
-rm(list=ls())
-options(scipen=99999)
-
 # Setting working directory dynamically
 tryCatch({
   setwd(getSrcDirectory()[1])
@@ -22,7 +22,7 @@ tryCatch({
 })
 
 # Loading dataset
-dataset <- read.csv("./dataset/OnlineRetail.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
+dataset <- read.csv("./datasets/OnlineRetail.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
 str(dataset)
 summary(dataset)
 
@@ -47,20 +47,36 @@ emptyDescriptions
 length(emptyDescriptions)
 dataset <- filter(dataset, nchar(as.character(dataset$Description)) > 5)
 
-# Fixing items with a negative quantity
+# Fixing items with a negative quantity and unit price
 dataset$Quantity <- abs(dataset$Quantity)
-summary(dataset$Description)
+dataset$UnitPrice <- abs(dataset$UnitPrice)
+summary(dataset)
+
+# Outliers itemtified with unit price
+summary(dataset$UnitPrice)
+
+# Outlier Removal
+q1UnitPrice <- summary(dataset$UnitPrice)[2]
+q3UnitPrice <- summary(dataset$UnitPrice)[5]
+IQR <- q3UnitPrice - q1UnitPrice
+
+dataset <- dataset[dataset$UnitPrice >= q1UnitPrice - 1.5*IQR & dataset$UnitPrice <= q3UnitPrice + 1.5*IQR, ]
+
 
 # Discretization of Quantity (also addresses outliers)
 #
 # Key:
-# L -> Low
-# M -> Medium
-# H -> High
-# VH -> Very High
+# L  -> Low       -> range 0 to 5 
+# M  -> Medium    -> range 6 to 10
+# H  -> High      -> range 11 to 15
+# VH -> Very High -> range 16 and up
 #
-dataset$Quantity <- cut(dataset$Quantity, c(0,1,3,8,max(dataset$Quantity)), right = TRUE, labels = c("L","M","H","VH"))
+dataset$Quantity <- cut(dataset$Quantity, c(0,5,10,15,max(dataset$Quantity)), right = TRUE, labels = c("L","M","H","VH"))
 summary(dataset$Quantity)
+
+# Normalization of UnitPrice
+dataset$UnitPrice <- ((dataset$UnitPrice - min(dataset$UnitPrice))/(max(dataset$UnitPrice) - min(dataset$UnitPrice))) * (10-1) + 1
+
 
 # replacement of unwanted characters
 dataset$Description <- trimws(dataset$Description)
@@ -98,14 +114,14 @@ chronDateValues <- chron(date=as.character(invoiceDates), times=invoiceTimes, fo
 # Add chron dates as new column after "InvoiceDate" column
 dataset <- tibble::add_column(dataset, ChronDates = chronDateValues, .after = "InvoiceDate")
 
-# View cleaned dataset
-View(dataset)
-
 # Output cleaned dataset to file
-write.csv(dataset, "./output/switzerland-salesdata_cleaned.csv", row.names = F)
+write.csv(dataset, "./output/switzerland-retail-data_cleaned.csv", row.names = F)
 
 ############# DATA CLEANING COMPLETE #############
 
+
+# View cleaned dataset
+View(dataset)
 
 
 
@@ -119,19 +135,19 @@ write.csv(dataset, "./output/switzerland-salesdata_cleaned.csv", row.names = F)
 # and present the extracted association rules for best performing associations
 
 # Loading in cleaned dataset
-switzerlandSalesData <- read.transactions("./output/switzerland-salesdata_cleaned.csv", format=c("single"), header = TRUE, rm.duplicates = FALSE, cols = c("InvoiceNo", "StockCode"), sep=",")
+switzerlandRetailData <- read.transactions("./output/switzerland-retail-data_cleaned.csv", format=c("single"), header = TRUE, rm.duplicates = FALSE, cols = c("InvoiceNo", "StockCode"), sep=",")
 
 # Viewing the item frequencies
-itemFrequencyPlot(switzerlandSalesData, support=0.1)
-itemFrequencyPlot(switzerlandSalesData, topN=4)
+itemFrequencyPlot(switzerlandRetailData, support=0.1)
+itemFrequencyPlot(switzerlandRetailData, topN=4)
 
 
-drules <- apriori(dataset)
+drules <- apriori(switzerlandRetailData)
 summary(drules)
 inspect(drules)
 View(as(drules, "data.frame"))
 
-drules2 <- apriori(dataset, parameter = list(support=0.2, confidence=0.75, minlen=2))
+drules2 <- apriori(switzerlandRetailData, parameter = list(support=0.1, confidence=0.8, minlen=2, maxlen=4))
 summary(drules2)
 inspect(drules2)
 View(as(drules, "data.frame"))
@@ -148,8 +164,4 @@ itemFrequencyPlot(dataset$Description, support=0.2)
 
 
 # <------------------ End of Problem 02 ------------------>
-
-
-
-
 

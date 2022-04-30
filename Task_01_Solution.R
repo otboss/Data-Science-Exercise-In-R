@@ -1,8 +1,7 @@
-
-library(classInt)
-
 rm(list=ls())
 options(scipen=99999)
+
+library(classInt)
 
 # Setting working directory dynamically
 tryCatch({
@@ -12,11 +11,12 @@ tryCatch({
 })
 
 # Loading dataset
-dataset <- read.csv("./dataset/SalesData.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
+dataset <- read.csv("./datasets/SalesData.csv", na.strings = c("", " ", "\"\"", "?", "??", "???", "!"), stringsAsFactors = T)
 str(dataset)
+summary(dataset)
 
 
-# 
+# #############
 # Data Cleaning
 # 
 # Step 1 - Removal of irrelevant data
@@ -27,37 +27,45 @@ str(dataset)
 # Step 6 -  Validate data
 # 
 
-# TODO: Remove all NA's
-summary(dataset$Region)
-dataset$Region[is.na(dataset$Region)] <- "unknown"
-levels(dataset$Region)
+# NA values for Region identified using Summary
+Summary(dataset$Region)
 
-summary(dataset$ItemType)
+# Replace NA's from Region column
+dataset$Region <- as.character(dataset$Region)
+dataset$Region[is.na(dataset$Region)] <- "Unknown"
+dataset$Region <- factor(dataset$Region)
 
-summary(dataset$Sales.Channel)
-levels(dataset$Sales.Channel)[3] <- NA
-summary(dataset$Sales.Channel)
-dataset$Sales.Channel[is.na(dataset$Sales.Channel)] <- "unknown"
+# NA values for ItemType identified using Summary
+Summary(dataset$ItemType)
 
+# Replace NA's from ItemType column
+dataset$ItemType <- as.character(dataset$ItemType)
+dataset$ItemType[is.na(dataset$ItemType)] <- "Unknown"
+dataset$ItemType <- factor(dataset$ItemType)
 
-summary(dataset$Order.Priority)
-summary(dataset$Order.Date)
-summary(dataset$Order.ID)
+# NA values for Sales.Channel identified using Summary
+Summary(dataset$Sales.Channel)
 
-str(dataset$Unit.Price)
-hist(dataset$Unit.Price)
-plot(density(dataset$Unit.Price, na.rm = T))
+# Replace NA's and irrelevant values from SalesChannel column
+dataset$Sales.Channel <- as.character(dataset$Sales.Channel)
+dataset$Sales.Channel[is.na(dataset$Sales.Channel)] <- "Unknown"
+dataset$Sales.Channel[dataset$Sales.Channel != "Online" & dataset$Sales.Channel != "Offline"] <- "Unknown"
+dataset$Sales.Channel <- factor(dataset$Sales.Channel)
+levels(dataset$Sales.Channel)
 
-View(dataset)
+dataset$Order.Date <- as.Date(dataset$Order.Date, format = "%m/%d/%Y")
+dataset$Ship.Date <- as.Date(dataset$Ship.Date, format = "%m/%d/%Y")
 
+# Normalization of unit price field
+dataset$Unit.Price <- ((dataset$Unit.Price - min(dataset$Unit.Price))/(max(dataset$Unit.Price) - min(dataset$Unit.Price))) * (10-1) + 1
 
-# <------------------ Problem 01 ------------------>
-
-
-# Problem 01a - Apply binning and normalization as necessary to improve results.
-
-dataset$Unit.Price <- normalize(dataset$Unit.Price)
-
+# Discretization of Quantity (also addresses outliers)
+#
+# Key:
+# L  -> Low
+# M  -> Medium
+# H  -> High
+#
 bins <- classIntervals(dataset$Units.Sold, 3, style = 'equal')
 unitsSoldType = c()
 for (i in 1:length(dataset$Units.Sold)) {
@@ -70,41 +78,69 @@ for (i in 1:length(dataset$Units.Sold)) {
   }
   unitsSoldType <- append(unitsSoldType, rating)
 }
-dataset$Units.Sold.Type <- unitsSoldType
+dataset$Units.Sold.Type <- as.factor(unitsSoldType)
 
-str(dataset$Units.Sold.Type)
+# Inspect new categorical column
+summary(dataset$Units.Sold.Type)
+
+str(dataset$Unit.Price)
+hist(dataset$Unit.Price)
+
+# Plot density graph...
+plot(density(dataset$Unit.Price, na.rm = T))
+
+# Write cleaned dataset to file
+write.csv(dataset, "./output/sales-data_cleaned.csv", row.names = F)
+
+############# DATA CLEANING COMPLETE #############
+
+
+
+
+# Inspect cleaned dataset
+View(dataset)
+
+cleanedDataset <- read.csv("./output/sales-data_cleaned.csv", stringsAsFactors = T)
+
+
+
+
+
+# <------------------ Problem 01 ------------------>
+
+# Problem 01a - Apply binning and normalization as necessary to improve results.
+
+# Completed in data cleaning and preparation process above
 
 # Problem 01b - Construct new field which has the number of days between order Date and Ship Date.
 
 deliveryDays <- c()
-for (i in 1:length(dataset$Order.Date)) {
-  shippingDays <- as.Date(dataset$Ship.Date[i], format = "%m/%d/%Y") - as.Date(dataset$Order.Date[i], format = "%m/%d/%Y")
-  deliveryDays <- append(deliveryDays, strtoi(shippingDays, base = 0L))
+for (i in 1:length(cleanedDataset$Order.Date)) {
+  shippingDays <- as.Date(cleanedDataset$Ship.Date[i]) - as.Date(cleanedDataset$Order.Date[i])
+  deliveryDays <- append(deliveryDays, as.integer(strtoi(shippingDays, base = 0L)))
 }
-dataset$Ship.Time <- deliveryDays
+# Assigning to new column called "Ship Time"
+cleanedDataset$Ship.Time <- deliveryDays
 
 # Problem 01c - Provide short in-code comments to explain the reason and what choices are made.
-# TODO
 
 # <------------------ End of Problem 01 ------------------>
 
-View(dataset)
-# Convert factors to numeric for clustering
-dataset$Region <- as.numeric(dataset$Region)
-dataset$Units.Sold <- as.numeric(dataset$Units.Sold)
-dataset$Unit.Price <- as.numeric(dataset$Unit.Price)
-dataset$Order.Priority <- as.numeric(dataset$Order.Priority)
-# dataset$Region <- as.numeric(dataset$Region)
-# dataset$Region <- as.numeric(dataset$Region)
-# dataset$Region <- as.numeric(dataset$Region)
 
 
+# Check dataset to confirm changes above
+View(cleanedDataset)
 
 
 # <------------------ Problem 02 ------------------>
-length(dataset$Units.Sold.Type)
 
-sample.salesdata <- dataset[1:1000,]
+cleanedDataset$Order.ID <- NULL
+
+# Convert factors to numeric for clustering
+cleanedDataset <- dplyr::mutate_all(cleanedDataset, function(x) as.numeric(x))
+
+
+sample.salesdata <- cleanedDataset[1:200,]
 str(sample.salesdata)
 
 
@@ -117,19 +153,19 @@ plot(hclust.01)
 
 # 4 cluster : 
 cluster.members.four <- cutree(hclust.01, 4)
-View(as.data.frame(cluster.members.four))
+plot(cluster.members.four)
 
 aggregate(sample.salesdata, by=list(cluster.members.four), FUN = mean)
 
 # 6 cluster : 
 cluster.members.six <- cutree(hclust.01, 6)
-View(as.data.frame(cluster.members.six))
+plot(cluster.members.six)
 
 aggregate(sample.salesdata, by=list(four.cluster.members), FUN = mean)
 
 # 8 cluster : 
 cluster.members.eight <- cutree(hclust.01, 8)
-View(as.data.frame(cluster.members.eight))
+plot(cluster.members.eight)
 
 aggregate(sample.salesdata, by=list(cluster.members.eight), FUN = mean) 
 
@@ -137,18 +173,18 @@ aggregate(sample.salesdata, by=list(cluster.members.eight), FUN = mean)
 # k-means clustering
 
 # 4 cluster : 
-km.results.four <- kmeans(sample.salesdatam, 4)
+km.results.four <- kmeans(sample.salesdata, 4)
 km.results.four
 plot(sample.salesdata, km.results.four$cluster)
 
 
 # 6 cluster : 
-km.results.six <- kmeans(sample.salesdatam, 6)
+km.results.six <- kmeans(sample.salesdata, 6)
 km.results.six
 plot(sample.salesdata, km.results.six$cluster)
 
 # 8 cluster :
-km.results.eight <- kmeans(sample.salesdatam, 8)
+km.results.eight <- kmeans(sample.salesdata, 8)
 km.results.eight
 plot(sample.salesdata, km.results.eight$cluster)
 
