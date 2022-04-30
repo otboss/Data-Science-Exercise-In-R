@@ -1,0 +1,3 @@
+.~lock*
+output/**
+!output/README.md
