@@ -1,3 +1,4 @@
 .~lock*
 output/**
 !output/README.md
+.Rhistory
